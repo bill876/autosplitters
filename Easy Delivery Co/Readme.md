@@ -6,6 +6,7 @@ Enable or disable in splitter settings.
 Only starts and endings are enabled by default.
 
 * Start the timer when the "start" button is pressed
+* Reset the time when returning to the main menu
 * Split when a different ending is triggered
 * Split when a new bobblehead is collected (2 cats under the bridge count as 1 split)
 

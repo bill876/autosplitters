@@ -6,6 +6,7 @@ startup
     vars.Helper.LoadSceneManager = true;
     Assembly.Load(File.ReadAllBytes("Components/uhara7")).CreateInstance("Main");
 
+    settings.Add("resetOnMainMenu", false, "Reset when returning to the main menu (you don't want this for 100%+ runs)");
     settings.Add("splitEndings", true, "Split when a different ending is triggered");
     settings.Add("splitBobbles", false, "Split when a new bobblehead is collected (2 cats under the bridge count as 1 split)");
 }
@@ -58,6 +59,13 @@ update
 
     if (old.displayBobble != current.displayBobble) {
         vars.Log("displayBobble: " + old.displayBobble + " -> " + current.displayBobble);
+    }
+}
+
+reset
+{
+    if (settings["resetOnMainMenu"] && current.activeScene == "TitleScreen" && old.activeScene != "TitleScreen") {
+        return true;
     }
 }
 
