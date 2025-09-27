@@ -83,7 +83,7 @@ split
     }
     if (
         settings["splitBobbles"]
-        && current.activeScene != "TitleScreen"
+        && (current.activeScene == "MountainTown" || current.activeScene == "FishingTown" || current.activeScene == "SnowyPeaks")
         && current.displayBobble != old.displayBobble
         && current.displayBobble >= 0 && current.displayBobble <= 12
         && !vars.bobblesCollected.Contains(current.displayBobble)
