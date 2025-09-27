@@ -9,6 +9,22 @@ startup
     settings.Add("resetOnMainMenu", false, "Reset when returning to the main menu (you don't want this for 100%+ runs)");
     settings.Add("splitEndings", true, "Split when a different ending is triggered");
     settings.Add("splitBobbles", false, "Split when a new bobblehead is collected (2 cats under the bridge count as 1 split)");
+    settings.Add("splitOnTravel", false, "Split when traveling to a different area");
+    var travelPairs = new List<Tuple<string, string>>()
+    {
+        Tuple.Create("MountainTown", "SnowyPeaks"),
+        Tuple.Create("SnowyPeaks", "MountainTown"),
+        Tuple.Create("MountainTown", "FishingTown"),
+        Tuple.Create("FishingTown", "MountainTown"),
+        Tuple.Create("MountainTown", "Factory"),
+        Tuple.Create("Factory", "MountainTown"),
+        Tuple.Create("Factory", "FactoryInside"),
+        Tuple.Create("FactoryInside", "Factory"),
+    };
+    foreach (var pair in travelPairs)
+    {
+        settings.Add("travel_" + pair.Item1 + "_" + pair.Item2, false, "From " + pair.Item1 + " to " + pair.Item2, "splitOnTravel");
+    }
 }
 
 init
@@ -81,6 +97,7 @@ split
     if (settings["splitEndings"] && current.activeScene == "Ending" && current.currentEnding != old.currentEnding) {
         return true;
     }
+
     if (
         settings["splitBobbles"]
         && (current.activeScene == "MountainTown" || current.activeScene == "FishingTown" || current.activeScene == "SnowyPeaks")
@@ -113,5 +130,12 @@ split
         // 10 = FT Lake
         // 11 = MT Depot Roof
         // 12 = SP Radio Tower
+    }
+
+    if (settings["splitOnTravel"] && current.activeScene != old.activeScene) {
+        var travelKey = "travel_" + old.activeScene + "_" + current.activeScene;
+        if (settings[travelKey]) {
+            return true;
+        }
     }
 }
