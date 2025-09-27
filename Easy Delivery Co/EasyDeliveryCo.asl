@@ -7,8 +7,8 @@ startup
     Assembly.Load(File.ReadAllBytes("Components/uhara7")).CreateInstance("Main");
 
     settings.Add("resetOnMainMenu", false, "Reset when returning to the main menu (you don't want this for 100%+ runs)");
-    settings.Add("splitEndings", true, "Split when a different ending is triggered");
-    settings.Add("splitBobbles", false, "Split when a new bobblehead is collected (2 cats under the bridge count as 1 split)");
+    settings.Add("splitOnEndings", true, "Split when a different ending is triggered");
+    settings.Add("splitOnBobbles", false, "Split when a new bobblehead is collected (2 cats under the bridge count as 1 split)");
     settings.Add("splitOnTravel", false, "Split when traveling to a different area");
     var travelPairs = new List<Tuple<string, string>>()
     {
@@ -68,7 +68,6 @@ update
     if (old.activeScene != current.activeScene) {
         vars.Log("activeScene: " + old.activeScene + " -> " + current.activeScene);
     }
-
     if (old.currentEnding != current.currentEnding) {
         vars.Log("currentEnding: " + old.currentEnding + " -> " + current.currentEnding);
     }
@@ -104,12 +103,12 @@ start
 
 split
 {
-    if (settings["splitEndings"] && current.activeScene == "Ending" && current.currentEnding != old.currentEnding) {
+    if (settings["splitOnEndings"] && current.activeScene == "Ending" && current.currentEnding != old.currentEnding) {
         return true;
     }
 
     if (
-        settings["splitBobbles"]
+        settings["splitOnBobbles"]
         && vars.shouldTrackBobble == true
         && (current.activeScene == "MountainTown" || current.activeScene == "FishingTown" || current.activeScene == "SnowyPeaks")
         && current.displayBobble != old.displayBobble
