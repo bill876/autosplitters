@@ -40,21 +40,25 @@ init
 
         var jitSave = vars.Uhara.CreateTool("Unity", "DotNet", "JitSave");
         IntPtr loadIntroFlag = jitSave.AddFlag("IntroDotExe", "LoadIntro");
+        IntPtr enableSnowcatFlag = jitSave.AddFlag("SnowcatManager", "EnableSnowcat");
         var snowcatManager = jitSave.AddInst("SnowcatManager");
         jitSave.ProcessQueue();
 
         vars.Helper["loadIntro"] = vars.Helper.Make<int>(loadIntroFlag);
+        vars.Helper["enableSnowcat"] = vars.Helper.Make<int>(enableSnowcatFlag);
         vars.Helper["displayBobble"] = vars.Helper.Make<int>(snowcatManager, 0x70); // .displayBobble
 
         return true;
     });
 
     vars.bobblesCollected = new List<int>();
+    vars.shouldTrackBobble = false;
 }
 
 onStart {
-    vars.Log("Run started");
     vars.bobblesCollected.Clear();
+    vars.shouldTrackBobble = false;
+    vars.Log("Run started");
 }
 
 update
@@ -68,11 +72,17 @@ update
     if (old.currentEnding != current.currentEnding) {
         vars.Log("currentEnding: " + old.currentEnding + " -> " + current.currentEnding);
     }
-
     if (old.loadIntro != current.loadIntro) {
         vars.Log("loadIntro: " + old.loadIntro + " -> " + current.loadIntro);
     }
-
+    if (old.enableSnowcat != current.enableSnowcat) {
+        vars.Log("enableSnowcat: " + old.enableSnowcat + " -> " + current.enableSnowcat);
+        if (current.enableSnowcat > 0 && current.enableSnowcat > old.enableSnowcat) {
+            vars.shouldTrackBobble = true;
+        } else {
+            vars.shouldTrackBobble = false;
+        }
+    }
     if (old.displayBobble != current.displayBobble) {
         vars.Log("displayBobble: " + old.displayBobble + " -> " + current.displayBobble);
     }
@@ -100,6 +110,7 @@ split
 
     if (
         settings["splitBobbles"]
+        && vars.shouldTrackBobble == true
         && (current.activeScene == "MountainTown" || current.activeScene == "FishingTown" || current.activeScene == "SnowyPeaks")
         && current.displayBobble != old.displayBobble
         && current.displayBobble >= 0 && current.displayBobble <= 12
@@ -107,6 +118,7 @@ split
     ) {
         vars.Log("Collected bobble #" + current.displayBobble);
         vars.bobblesCollected.Add(current.displayBobble);
+        vars.shouldTrackBobble = false;
 
         // For most bobbles, we just split
         if (current.displayBobble != 2 && current.displayBobble != 3) {
@@ -134,7 +146,7 @@ split
 
     if (settings["splitOnTravel"] && current.activeScene != old.activeScene) {
         var travelKey = "travel_" + old.activeScene + "_" + current.activeScene;
-        if (settings[travelKey]) {
+        if (settings.ContainsKey(travelKey) && settings[travelKey]) {
             return true;
         }
     }
