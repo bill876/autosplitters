@@ -9,6 +9,7 @@ startup
     settings.Add("resetOnMainMenu", false, "Reset when returning to the main menu (you don't want this for 100%+ runs)");
     settings.Add("splitOnEndings", true, "Split when a different ending is triggered");
     settings.Add("splitOnBobbles", false, "Split when a new bobblehead is collected (2 cats under the bridge count as 1 split)");
+
     settings.Add("splitOnTravel", false, "Split when traveling to a different area");
     var travelPairs = new List<Tuple<string, string>>()
     {
@@ -24,6 +25,12 @@ startup
     foreach (var pair in travelPairs)
     {
         settings.Add("travel_" + pair.Item1 + "_" + pair.Item2, false, "From " + pair.Item1 + " to " + pair.Item2, "splitOnTravel");
+    }
+
+    settings.Add("splitOnTruckUpgrades", false, "Split when a truck upgrade is acquired");
+    vars.possibleTruckUpgrades = new string[] { "Map", "Snow Tires", "Bumper", "Ice Chains" };
+    for (var i = 0; i < vars.possibleTruckUpgrades.Length; i++) {
+        settings.Add("truckUpgrade_" + i, false, vars.possibleTruckUpgrades[i], "splitOnTruckUpgrades");
     }
 }
 
@@ -41,23 +48,38 @@ init
         var jitSave = vars.Uhara.CreateTool("Unity", "DotNet", "JitSave");
         IntPtr loadIntroFlag = jitSave.AddFlag("IntroDotExe", "LoadIntro");
         IntPtr enableSnowcatFlag = jitSave.AddFlag("SnowcatManager", "EnableSnowcat");
-        var snowcatManager = jitSave.AddInst("SnowcatManager");
+        IntPtr snowcatManager = jitSave.AddInst("SnowcatManager");
+        IntPtr truckUpgradesManager = jitSave.AddInst("TruckUpgrades", "LateUpdate");
+        IntPtr truckUpgradeMakePaymentFlag = jitSave.AddFlag("UpgradeCheckout", "MakePayment");
         jitSave.ProcessQueue();
 
         vars.Helper["loadIntro"] = vars.Helper.Make<int>(loadIntroFlag);
         vars.Helper["enableSnowcat"] = vars.Helper.Make<int>(enableSnowcatFlag);
-        vars.Helper["displayBobble"] = vars.Helper.Make<int>(snowcatManager, 0x70); // .displayBobble
+        vars.Helper["displayBobble"] = vars.Helper.Make<int>(snowcatManager, 0x70); // SnowcatManager -> displayBobble
+
+        vars.truckUpgradeWatchers = new MemoryWatcher[vars.possibleTruckUpgrades.Length];
+        vars.Helper["upgradeMakePaymentCallCount"] = vars.Helper.Make<int>(truckUpgradeMakePaymentFlag);
+        vars.truckUpgradeWatchers[0] = vars.Helper["truckHasGps"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x5A); // TruckUpgrades -> .hasGps
+        vars.truckUpgradeWatchers[1] = vars.Helper["truckHasTires"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x58); // TruckUpgrades -> .hasTires
+        vars.truckUpgradeWatchers[2] = vars.Helper["truckHasBumper"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x59); // TruckUpgrades -> .hasBumper
+        vars.truckUpgradeWatchers[3] = vars.Helper["truckHasChains"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x5B); // TruckUpgrades -> .hasChains
 
         return true;
     });
 
     vars.bobblesCollected = new List<int>();
-    vars.shouldTrackBobble = false;
+    vars.shouldTrackNextBobble = false;
+    vars.upgradesAcquired = new bool[vars.possibleTruckUpgrades.Length];
+    vars.shouldTrackNextTruckUpgrade = false;
 }
 
 onStart {
     vars.bobblesCollected.Clear();
-    vars.shouldTrackBobble = false;
+    vars.shouldTrackNextBobble = false;
+    for (var i = 0; i < vars.upgradesAcquired.Length; i++) {
+        vars.upgradesAcquired[i] = false;
+    }
+    vars.shouldTrackNextTruckUpgrade = false;
     vars.Log("Run started");
 }
 
@@ -77,13 +99,36 @@ update
     if (old.enableSnowcat != current.enableSnowcat) {
         vars.Log("enableSnowcat: " + old.enableSnowcat + " -> " + current.enableSnowcat);
         if (current.enableSnowcat > 0 && current.enableSnowcat > old.enableSnowcat) {
-            vars.shouldTrackBobble = true;
+            vars.shouldTrackNextBobble = true;
         } else {
-            vars.shouldTrackBobble = false;
+            vars.shouldTrackNextBobble = false;
         }
     }
     if (old.displayBobble != current.displayBobble) {
         vars.Log("displayBobble: " + old.displayBobble + " -> " + current.displayBobble);
+    }
+    if (old.truckHasTires != current.truckHasTires) {
+        vars.Log("truckHasTires: " + old.truckHasTires + " -> " + current.truckHasTires);
+    }
+    if (old.truckHasBumper != current.truckHasBumper) {
+        vars.Log("truckHasBumper: " + old.truckHasBumper + " -> " + current.truckHasBumper);
+    }
+    if (old.truckHasGps != current.truckHasGps) {
+        vars.Log("truckHasGps: " + old.truckHasGps + " -> " + current.truckHasGps);
+    }
+    if (old.truckHasChains != current.truckHasChains) {
+        vars.Log("truckHasChains: " + old.truckHasChains + " -> " + current.truckHasChains);
+    }
+    if (old.upgradeMakePaymentCallCount != current.upgradeMakePaymentCallCount) {
+        vars.Log("upgradeMakePaymentCallCount: " + old.upgradeMakePaymentCallCount + " -> " + current.upgradeMakePaymentCallCount);
+        if (
+            current.upgradeMakePaymentCallCount > 0 && current.upgradeMakePaymentCallCount > old.upgradeMakePaymentCallCount
+            && (current.activeScene == "MountainTown" || current.activeScene == "FishingTown" || current.activeScene == "SnowyPeaks")
+        ) {
+            vars.shouldTrackNextTruckUpgrade = true;
+        } else {
+            vars.shouldTrackNextTruckUpgrade = false;
+        }
     }
 }
 
@@ -109,7 +154,7 @@ split
 
     if (
         settings["splitOnBobbles"]
-        && vars.shouldTrackBobble == true
+        && vars.shouldTrackNextBobble == true
         && (current.activeScene == "MountainTown" || current.activeScene == "FishingTown" || current.activeScene == "SnowyPeaks")
         && current.displayBobble != old.displayBobble
         && current.displayBobble >= 0 && current.displayBobble <= 12
@@ -117,7 +162,7 @@ split
     ) {
         vars.Log("Collected bobble #" + current.displayBobble);
         vars.bobblesCollected.Add(current.displayBobble);
-        vars.shouldTrackBobble = false;
+        vars.shouldTrackNextBobble = false;
 
         // For most bobbles, we just split
         if (current.displayBobble != 2 && current.displayBobble != 3) {
@@ -147,6 +192,29 @@ split
         var travelKey = "travel_" + old.activeScene + "_" + current.activeScene;
         if (settings.ContainsKey(travelKey) && settings[travelKey]) {
             return true;
+        }
+    }
+
+    if (
+        settings["splitOnTruckUpgrades"]
+        && vars.shouldTrackNextTruckUpgrade == true
+    ) {
+        for (var idx = 0; idx < vars.possibleTruckUpgrades.Length; idx++) {
+            if (
+                vars.truckUpgradeWatchers[idx] != null
+                && vars.truckUpgradeWatchers[idx].Current != vars.truckUpgradeWatchers[idx].Old
+                && vars.truckUpgradeWatchers[idx].Current == true
+                && vars.upgradesAcquired[idx] == false
+            ) {
+                vars.shouldTrackNextTruckUpgrade = false;
+
+                vars.upgradesAcquired[idx] = true;
+                vars.Log("Acquired truck upgrade " + vars.possibleTruckUpgrades[idx]);
+                var upgradeKey = "truckUpgrade_" + idx;
+                if (settings.ContainsKey(upgradeKey) && settings[upgradeKey]) {
+                    return true;
+                }
+            }
         }
     }
 }
