@@ -28,9 +28,9 @@ startup
     }
 
     settings.Add("splitOnTruckUpgrades", false, "Split when a truck upgrade is acquired");
-    vars.possibleTruckUpgrades = new string[] { "Map", "Snow Tires", "Bumper", "Ice Chains" };
+    vars.possibleTruckUpgrades = new string[] { "SnowTires", "Bumper", "IceChains" };
     for (var i = 0; i < vars.possibleTruckUpgrades.Length; i++) {
-        settings.Add("truckUpgrade_" + i, false, vars.possibleTruckUpgrades[i], "splitOnTruckUpgrades");
+        settings.Add("truckUpgrade_" + vars.possibleTruckUpgrades[i], false, vars.possibleTruckUpgrades[i], "splitOnTruckUpgrades");
     }
 }
 
@@ -59,10 +59,9 @@ init
 
         vars.truckUpgradeWatchers = new MemoryWatcher[vars.possibleTruckUpgrades.Length];
         vars.Helper["upgradeMakePaymentCallCount"] = vars.Helper.Make<int>(truckUpgradeMakePaymentFlag);
-        vars.truckUpgradeWatchers[0] = vars.Helper["truckHasGps"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x5A); // TruckUpgrades -> .hasGps
-        vars.truckUpgradeWatchers[1] = vars.Helper["truckHasTires"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x58); // TruckUpgrades -> .hasTires
-        vars.truckUpgradeWatchers[2] = vars.Helper["truckHasBumper"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x59); // TruckUpgrades -> .hasBumper
-        vars.truckUpgradeWatchers[3] = vars.Helper["truckHasChains"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x5B); // TruckUpgrades -> .hasChains
+        vars.truckUpgradeWatchers[0] = vars.Helper["truckHasTires"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x58); // TruckUpgrades -> .hasTires
+        vars.truckUpgradeWatchers[1] = vars.Helper["truckHasBumper"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x59); // TruckUpgrades -> .hasBumper
+        vars.truckUpgradeWatchers[2] = vars.Helper["truckHasChains"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x5B); // TruckUpgrades -> .hasChains
 
         return true;
     });
@@ -112,9 +111,6 @@ update
     }
     if (old.truckHasBumper != current.truckHasBumper) {
         vars.Log("truckHasBumper: " + old.truckHasBumper + " -> " + current.truckHasBumper);
-    }
-    if (old.truckHasGps != current.truckHasGps) {
-        vars.Log("truckHasGps: " + old.truckHasGps + " -> " + current.truckHasGps);
     }
     if (old.truckHasChains != current.truckHasChains) {
         vars.Log("truckHasChains: " + old.truckHasChains + " -> " + current.truckHasChains);
@@ -210,7 +206,7 @@ split
 
                 vars.upgradesAcquired[idx] = true;
                 vars.Log("Acquired truck upgrade " + vars.possibleTruckUpgrades[idx]);
-                var upgradeKey = "truckUpgrade_" + idx;
+                var upgradeKey = "truckUpgrade_" + vars.possibleTruckUpgrades[idx];
                 if (settings.ContainsKey(upgradeKey) && settings[upgradeKey]) {
                     return true;
                 }
