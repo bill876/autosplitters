@@ -21,6 +21,8 @@ startup
         Tuple.Create("Factory", "MountainTown"),
         Tuple.Create("Factory", "FactoryInside"),
         Tuple.Create("FactoryInside", "Factory"),
+        Tuple.Create("FishingTown", "DamInside"),
+        Tuple.Create("DamInside", "FishingTown"),
     };
     foreach (var pair in travelPairs)
     {
