@@ -68,6 +68,7 @@ init
         return true;
     });
 
+    vars.endingsAchieved = new List<int>();
     vars.bobblesCollected = new List<int>();
     vars.shouldTrackNextBobble = false;
     vars.upgradesAcquired = new bool[vars.possibleTruckUpgrades.Length];
@@ -75,6 +76,7 @@ init
 }
 
 onStart {
+    vars.endingsAchieved.Clear();
     vars.bobblesCollected.Clear();
     vars.shouldTrackNextBobble = false;
     for (var i = 0; i < vars.upgradesAcquired.Length; i++) {
@@ -146,7 +148,15 @@ start
 
 split
 {
-    if (settings["splitOnEndings"] && current.activeScene == "Ending" && current.currentEnding != old.currentEnding) {
+    if (
+        settings["splitOnEndings"]
+        && current.activeScene == "Ending"
+        && current.currentEnding != old.currentEnding
+        && current.currentEnding >= 1 && current.currentEnding <= 3
+        && !vars.endingsAchieved.Contains(current.currentEnding)
+    ) {
+        vars.endingsAchieved.Add(current.currentEnding);
+        vars.Log("Achieved ending #" + current.currentEnding + ", total achieved: " + vars.endingsAchieved.Count + "/3");
         return true;
     }
 
