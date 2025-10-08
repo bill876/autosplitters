@@ -34,6 +34,30 @@ startup
     for (var i = 0; i < vars.possibleTruckUpgrades.Length; i++) {
         settings.Add("truckUpgrade_" + vars.possibleTruckUpgrades[i], false, vars.possibleTruckUpgrades[i], "splitOnTruckUpgrades");
     }
+
+    settings.Add("splitOnRestoreGoalCompleted", false, "Split when the \"Restore\" goal is completed (checked off in the goals menu)");
+    vars.mainGoalNames = new string[] { // names and indexes match the game
+        "Make a Delivery",
+        "Energy Drink",
+        "Lighter",
+        "Cabin in Snowy Peaks",
+        "Snow Tires",
+        "Fishing Town",
+        "Radio Towers",
+        "Security Gate",
+        "Bumper Bar",
+        "Hydro Dam",
+        "Supplies",
+        "Ice Chains",
+        "Factory",
+        "Restore",
+    };
+    vars.sideGoalNames = new string[] {
+        "Cooking Pot",
+        "Brew Coffee",
+        "Fishing Rod",
+        "Fish Soup",
+    };
 }
 
 init
@@ -53,17 +77,30 @@ init
         IntPtr snowcatManager = jitSave.AddInst("SnowcatManager");
         IntPtr truckUpgradesManager = jitSave.AddInst("TruckUpgrades", "LateUpdate");
         IntPtr truckUpgradeMakePaymentFlag = jitSave.AddFlag("UpgradeCheckout", "MakePayment");
+        IntPtr goalsManager = jitSave.AddInst("sGoals");
+        IntPtr goalsCompleteGoalFlag = jitSave.AddFlag("sGoals", "CompleteGoal");
         jitSave.ProcessQueue();
 
         vars.Helper["loadIntro"] = vars.Helper.Make<int>(loadIntroFlag);
         vars.Helper["enableSnowcat"] = vars.Helper.Make<int>(enableSnowcatFlag);
         vars.Helper["displayBobble"] = vars.Helper.Make<int>(snowcatManager, 0x70); // SnowcatManager -> displayBobble
 
-        vars.truckUpgradeWatchers = new MemoryWatcher[vars.possibleTruckUpgrades.Length];
         vars.Helper["upgradeMakePaymentCallCount"] = vars.Helper.Make<int>(truckUpgradeMakePaymentFlag);
+        vars.truckUpgradeWatchers = new MemoryWatcher[vars.possibleTruckUpgrades.Length];
         vars.truckUpgradeWatchers[0] = vars.Helper["truckHasTires"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x58); // TruckUpgrades -> .hasTires
         vars.truckUpgradeWatchers[1] = vars.Helper["truckHasBumper"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x59); // TruckUpgrades -> .hasBumper
         vars.truckUpgradeWatchers[2] = vars.Helper["truckHasChains"] = vars.Helper.Make<bool>(truckUpgradesManager, 0x5B); // TruckUpgrades -> .hasChains
+
+        vars.Helper["goalsCompleteGoalCallCount"] = vars.Helper.Make<int>(goalsCompleteGoalFlag);
+        vars.mainGoalsCompletedWatchers = new MemoryWatcher[vars.mainGoalNames.Length];
+        for (var i = 0; i < vars.mainGoalNames.Length; i++) {
+            vars.mainGoalsCompletedWatchers[i] = vars.Helper["mainGoalCompleted_" + i] = vars.Helper.Make<bool>(goalsManager, 0x38, 0x20 + i * 0x8, 0x41); // sGoals -> goals -> [i] -> complete
+        }
+
+        vars.sideGoalsCompletedWatchers = new MemoryWatcher[vars.sideGoalNames.Length];
+        for (var i = 0; i < vars.sideGoalNames.Length; i++) {
+            vars.sideGoalsCompletedWatchers[i] = vars.Helper["sideGoalCompleted_" + i] = vars.Helper.Make<bool>(goalsManager, 0x40, 0x20 + i * 0x8, 0x41); // sGoals -> sideGoals -> [i] -> complete
+        }
 
         return true;
     });
@@ -73,6 +110,8 @@ init
     vars.shouldTrackNextBobble = false;
     vars.upgradesAcquired = new bool[vars.possibleTruckUpgrades.Length];
     vars.shouldTrackNextTruckUpgrade = false;
+    vars.mainGoalsCompleted = new List<int>();
+    vars.shouldTrackNextGoalCompletion = false;
 }
 
 onStart {
@@ -83,6 +122,8 @@ onStart {
         vars.upgradesAcquired[i] = false;
     }
     vars.shouldTrackNextTruckUpgrade = false;
+    vars.mainGoalsCompleted.Clear();
+    vars.shouldTrackNextGoalCompletion = false;
     vars.Log("Run started");
 }
 
@@ -91,16 +132,16 @@ update
     current.activeScene = vars.Helper.Scenes.Active.Name ?? current.activeScene;
 
     if (old.activeScene != current.activeScene) {
-        vars.Log("activeScene: " + old.activeScene + " -> " + current.activeScene);
+        vars.Log("[Watcher] activeScene: " + old.activeScene + " -> " + current.activeScene);
     }
     if (old.currentEnding != current.currentEnding) {
-        vars.Log("currentEnding: " + old.currentEnding + " -> " + current.currentEnding);
+        vars.Log("[Watcher] currentEnding: " + old.currentEnding + " -> " + current.currentEnding);
     }
     if (old.loadIntro != current.loadIntro) {
-        vars.Log("loadIntro: " + old.loadIntro + " -> " + current.loadIntro);
+        vars.Log("[Watcher] loadIntro: " + old.loadIntro + " -> " + current.loadIntro);
     }
     if (old.enableSnowcat != current.enableSnowcat) {
-        vars.Log("enableSnowcat: " + old.enableSnowcat + " -> " + current.enableSnowcat);
+        vars.Log("[Watcher] enableSnowcat: " + old.enableSnowcat + " -> " + current.enableSnowcat);
         if (current.enableSnowcat > 0 && current.enableSnowcat > old.enableSnowcat) {
             vars.shouldTrackNextBobble = true;
         } else {
@@ -108,19 +149,19 @@ update
         }
     }
     if (old.displayBobble != current.displayBobble) {
-        vars.Log("displayBobble: " + old.displayBobble + " -> " + current.displayBobble);
+        vars.Log("[Watcher] displayBobble: " + old.displayBobble + " -> " + current.displayBobble);
     }
     if (old.truckHasTires != current.truckHasTires) {
-        vars.Log("truckHasTires: " + old.truckHasTires + " -> " + current.truckHasTires);
+        vars.Log("[Watcher] truckHasTires: " + old.truckHasTires + " -> " + current.truckHasTires);
     }
     if (old.truckHasBumper != current.truckHasBumper) {
-        vars.Log("truckHasBumper: " + old.truckHasBumper + " -> " + current.truckHasBumper);
+        vars.Log("[Watcher] truckHasBumper: " + old.truckHasBumper + " -> " + current.truckHasBumper);
     }
     if (old.truckHasChains != current.truckHasChains) {
-        vars.Log("truckHasChains: " + old.truckHasChains + " -> " + current.truckHasChains);
+        vars.Log("[Watcher] truckHasChains: " + old.truckHasChains + " -> " + current.truckHasChains);
     }
     if (old.upgradeMakePaymentCallCount != current.upgradeMakePaymentCallCount) {
-        vars.Log("upgradeMakePaymentCallCount: " + old.upgradeMakePaymentCallCount + " -> " + current.upgradeMakePaymentCallCount);
+        vars.Log("[Watcher] upgradeMakePaymentCallCount: " + old.upgradeMakePaymentCallCount + " -> " + current.upgradeMakePaymentCallCount);
         if (
             current.upgradeMakePaymentCallCount > 0 && current.upgradeMakePaymentCallCount > old.upgradeMakePaymentCallCount
             && (current.activeScene == "MountainTown" || current.activeScene == "FishingTown" || current.activeScene == "SnowyPeaks")
@@ -128,6 +169,21 @@ update
             vars.shouldTrackNextTruckUpgrade = true;
         } else {
             vars.shouldTrackNextTruckUpgrade = false;
+        }
+    }
+
+    if (old.goalsCompleteGoalCallCount != current.goalsCompleteGoalCallCount) {
+        vars.Log("[Watcher] goalsCompleteGoalCallCount: " + old.goalsCompleteGoalCallCount + " -> " + current.goalsCompleteGoalCallCount);
+        if (current.goalsCompleteGoalCallCount > 0 && current.goalsCompleteGoalCallCount > old.goalsCompleteGoalCallCount) {
+            vars.shouldTrackNextGoalCompletion = true;
+        } else {
+            vars.shouldTrackNextGoalCompletion = false;
+        }
+    }
+
+    for (var i = 0; i < vars.mainGoalsCompletedWatchers.Length; i++) {
+        if (vars.mainGoalsCompletedWatchers[i] != null && vars.mainGoalsCompletedWatchers[i].Old != vars.mainGoalsCompletedWatchers[i].Current) {
+            vars.Log("[Watcher] Goal completed [" + i + "] (" + vars.mainGoalNames[i] + "): " + vars.mainGoalsCompletedWatchers[i].Old + " -> " + vars.mainGoalsCompletedWatchers[i].Current);
         }
     }
 }
@@ -168,9 +224,9 @@ split
         && current.displayBobble >= 0 && current.displayBobble <= 12
         && !vars.bobblesCollected.Contains(current.displayBobble)
     ) {
-        vars.Log("Collected bobble #" + current.displayBobble);
         vars.bobblesCollected.Add(current.displayBobble);
         vars.shouldTrackNextBobble = false;
+        vars.Log("Collected bobble #" + current.displayBobble + ", total collected: " + vars.bobblesCollected.Count + "/13");
 
         // For most bobbles, we just split
         if (current.displayBobble != 2 && current.displayBobble != 3) {
@@ -222,6 +278,40 @@ split
                 if (settings.ContainsKey(upgradeKey) && settings[upgradeKey]) {
                     return true;
                 }
+            }
+        }
+    }
+
+    if (
+        settings["splitOnRestoreGoalCompleted"]
+        && vars.shouldTrackNextGoalCompletion == true
+    ) {
+        for (var i = 0; i < vars.mainGoalsCompletedWatchers.Length; i++) {
+            if (
+                vars.mainGoalsCompletedWatchers[i] != null
+                && vars.mainGoalsCompletedWatchers[i].Old != vars.mainGoalsCompletedWatchers[i].Current
+                && vars.mainGoalsCompletedWatchers[i].Current == true
+                && !vars.mainGoalsCompleted.Contains(i)
+            ) {
+                vars.mainGoalsCompleted.Add(i);
+                vars.shouldTrackNextGoalCompletion = false;
+                vars.Log("Completed main goal #" + i + " (" + vars.mainGoalNames[i] + "), total completed: " + vars.mainGoalsCompleted.Count + "/" + vars.mainGoalNames.Length);
+
+                if (i == 13) { // "Restore" is the last main goal
+                    return true;
+                }
+            }
+        }
+        for (var i = 0; i < vars.sideGoalsCompletedWatchers.Length; i++) {
+            if (
+                vars.sideGoalsCompletedWatchers[i] != null
+                && vars.sideGoalsCompletedWatchers[i].Old != vars.sideGoalsCompletedWatchers[i].Current
+                && vars.sideGoalsCompletedWatchers[i].Current == true
+                && !vars.sideGoalsCompleted.Contains(i)
+            ) {
+                vars.sideGoalsCompleted.Add(i);
+                vars.shouldTrackNextGoalCompletion = false;
+                vars.Log("Completed side goal #" + i + " (" + vars.sideGoalNames[i] + "), total completed: " + vars.sideGoalsCompleted.Count + "/" + vars.sideGoalNames.Length);
             }
         }
     }

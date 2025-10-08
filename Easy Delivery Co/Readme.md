@@ -11,6 +11,7 @@ Only starts and endings are enabled by default.
 * Split when a new bobblehead is collected (2 cats under the bridge count as 1 split)
 * Split when entering a different area
 * Split when a truck upgrade is acquired
+* Split when the "Restore" goal is completed (checked off in the goals menu)
 
 ## Installation
 
